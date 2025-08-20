@@ -72,6 +72,7 @@ half = { version = "2.1", default-features = false, features = ["num-traits"] }
 crc32fast = { version = "1.4.2", optional = true, default-features = false }
 simdutf8 = { workspace = true , optional = true }
 ring = { version = "0.17", default-features = false, features = ["std"], optional = true }
+log = "0.4.27"
 
 [dev-dependencies]
 base64 = { version = "0.22", default-features = false, features = ["std"] }
