@@ -1103,6 +1103,10 @@ impl ParquetRecordBatchReader {
             None
         })
     }
+    
+    pub fn has_next(&self) -> bool {
+        self.read_plan.has_next()
+    }
 }
 
 impl RecordBatchReader for ParquetRecordBatchReader {

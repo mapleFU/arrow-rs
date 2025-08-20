@@ -243,6 +243,15 @@ impl ReadPlan {
         self.selection.as_mut()
     }
 
+    pub(crate) fn has_next(&self) -> bool {
+        match &self.selection {
+            None => false,
+            Some(s) => {
+                !s.is_empty()
+            }
+        }
+    }
+
     /// Return the number of rows to read in each output batch
     #[inline(always)]
     pub fn batch_size(&self) -> usize {
