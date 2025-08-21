@@ -1107,6 +1107,10 @@ impl ParquetRecordBatchReader {
     pub fn has_next(&self) -> bool {
         self.read_plan.has_next()
     }
+
+    pub fn remaining_row_count(&self) -> usize {
+        self.read_plan.remaining_row_count()
+    }
 }
 
 impl RecordBatchReader for ParquetRecordBatchReader {

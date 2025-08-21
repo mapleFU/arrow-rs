@@ -252,6 +252,21 @@ impl ReadPlan {
         }
     }
 
+    pub(crate) fn remaining_row_count(&self) -> usize {
+        match &self.selection {
+            None => 0,
+            Some(s) => {
+                let mut value = 0;
+                for v in s {
+                    if !v.skip {
+                        value += v.row_count;
+                    }
+                }
+                value
+            }
+        }
+    }
+
     /// Return the number of rows to read in each output batch
     #[inline(always)]
     pub fn batch_size(&self) -> usize {
