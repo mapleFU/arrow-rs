@@ -243,18 +243,18 @@ impl ReadPlan {
         self.selection.as_mut()
     }
 
-    pub(crate) fn has_next(&self) -> bool {
+    pub(crate) fn may_has_next(&self) -> bool {
         match &self.selection {
-            None => false,
+            None => true,
             Some(s) => {
                 !s.is_empty()
             }
         }
     }
 
-    pub(crate) fn remaining_row_count(&self) -> usize {
+    pub(crate) fn remaining_row_count(&self) -> Option<usize> {
         match &self.selection {
-            None => 0,
+            None => None,
             Some(s) => {
                 let mut value = 0;
                 for v in s {
@@ -262,7 +262,7 @@ impl ReadPlan {
                         value += v.row_count;
                     }
                 }
-                value
+                Some(value)
             }
         }
     }
