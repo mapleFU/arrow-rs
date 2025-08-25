@@ -17,14 +17,6 @@
 
 //! Contains reader which reads parquet data into arrow [`RecordBatch`]
 
-use arrow_array::cast::AsArray;
-use arrow_array::Array;
-use arrow_array::{RecordBatch, RecordBatchReader};
-use arrow_schema::{ArrowError, DataType as ArrowType, Schema, SchemaRef};
-pub use filter::{ArrowPredicate, ArrowPredicateFn, RowFilter};
-pub use selection::{RowSelection, RowSelector};
-use std::fmt::{Debug, Formatter};
-use std::sync::Arc;
 pub use crate::arrow::array_reader::RowGroups;
 use crate::arrow::array_reader::{ArrayReader, ArrayReaderBuilder};
 use crate::arrow::schema::{parquet_to_arrow_schema_and_fields, ParquetField};
@@ -40,13 +32,17 @@ use crate::file::metadata::{PageIndexPolicy, ParquetMetaData, ParquetMetaDataRea
 use crate::file::reader::{ChunkReader, SerializedPageReader};
 use crate::format::{BloomFilterAlgorithm, BloomFilterCompression, BloomFilterHash};
 use crate::schema::types::SchemaDescriptor;
+use arrow_array::cast::AsArray;
+use arrow_array::Array;
+use arrow_array::{RecordBatch, RecordBatchReader};
+use arrow_schema::{ArrowError, DataType as ArrowType, Schema, SchemaRef};
+pub use filter::{ArrowPredicate, ArrowPredicateFn, RowFilter};
+pub use selection::{RowSelection, RowSelector};
+use std::fmt::{Debug, Formatter};
+use std::sync::Arc;
 
 use crate::arrow::arrow_reader::metrics::ArrowReaderMetrics;
 pub(crate) use read_plan::{ReadPlan, ReadPlanBuilder};
-
-// Import log for performance debugging
-use log;
-
 mod filter;
 pub mod metrics;
 mod read_plan;
@@ -855,9 +851,6 @@ impl<T: ChunkReader + 'static> ParquetRecordBatchReaderBuilder<T> {
     ///
     /// Note: this will eagerly evaluate any `RowFilter` before returning
     pub fn build(self) -> Result<ParquetRecordBatchReader> {
-        let start_time = std::time::Instant::now();
-        log::debug!("Starting ParquetRecordBatchReader build");
-        
         let Self {
             input,
             metadata,
@@ -874,19 +867,13 @@ impl<T: ChunkReader + 'static> ParquetRecordBatchReaderBuilder<T> {
             // Not used for the sync reader, see https://github.com/apache/arrow-rs/issues/8000
             max_predicate_cache_size: _,
         } = self;
-        
-        log::debug!("Destructured self in {:?}", start_time.elapsed());
 
         // Try to avoid allocate large buffer
-        let batch_size_start = std::time::Instant::now();
         let batch_size = self
             .batch_size
             .min(metadata.file_metadata().num_rows() as usize);
-        log::debug!("Calculated batch_size ({}) in {:?}", batch_size, batch_size_start.elapsed());
 
-        let row_groups_start = std::time::Instant::now();
         let row_groups = row_groups.unwrap_or_else(|| (0..metadata.num_row_groups()).collect());
-        log::debug!("Prepared row_groups ({} groups) in {:?}", row_groups.len(), row_groups_start.elapsed());
 
         let reader_start = std::time::Instant::now();
         let reader = ReaderRowGroups {
@@ -894,56 +881,41 @@ impl<T: ChunkReader + 'static> ParquetRecordBatchReaderBuilder<T> {
             metadata,
             row_groups,
         };
-        log::debug!("Created ReaderRowGroups in {:?}", reader_start.elapsed());
 
         let plan_builder_start = std::time::Instant::now();
-        let mut plan_builder = ReadPlanBuilder::new(batch_size).with_selection(selection);
-        log::debug!("Created ReadPlanBuilder in {:?}", plan_builder_start.elapsed());
+        let mut plan_builder = ReadPlanBuilder::new(batch_size)
+            .with_selection(selection)
+            .with_row_group_row_numbers(reader.num_rows());
 
         // Update selection based on any filters
-        let filter_start = std::time::Instant::now();
         if let Some(filter) = filter.as_mut() {
-            log::debug!("Processing {} filter predicates", filter.predicates.len());
-            for (i, predicate) in filter.predicates.iter_mut().enumerate() {
-                let predicate_start = std::time::Instant::now();
+            for predicate in filter.predicates.iter_mut() {
                 // break early if we have ruled out all rows
                 if !plan_builder.selects_any() {
-                    log::debug!("Breaking early - no rows selected after predicate {}", i);
                     break;
                 }
 
                 let mut cache_projection = predicate.projection().clone();
                 cache_projection.intersect(&projection);
 
-                let array_reader_start = std::time::Instant::now();
                 let array_reader = ArrayReaderBuilder::new(&reader, &metrics)
                     .build_array_reader(fields.as_deref(), predicate.projection())?;
-                log::debug!("Built predicate array reader {} in {:?}", i, array_reader_start.elapsed());
 
-                let with_predicate_start = std::time::Instant::now();
                 plan_builder = plan_builder.with_predicate(array_reader, predicate.as_mut())?;
-                log::debug!("Applied predicate {} in {:?}", i, with_predicate_start.elapsed());
-                log::debug!("Total predicate {} processing time: {:?}", i, predicate_start.elapsed());
             }
         }
-        log::debug!("Filter processing completed in {:?}", filter_start.elapsed());
 
-        let main_array_reader_start = std::time::Instant::now();
         let array_reader = ArrayReaderBuilder::new(&reader, &metrics)
             .build_array_reader(fields.as_deref(), &projection)?;
-        log::debug!("Built main array reader in {:?}", main_array_reader_start.elapsed());
 
-        let read_plan_start = std::time::Instant::now();
         let read_plan = plan_builder
             .limited(reader.num_rows())
             .with_offset(offset)
             .with_limit(limit)
             .build_limited()
             .build();
-        log::debug!("Built read plan in {:?}", read_plan_start.elapsed());
 
         let result = ParquetRecordBatchReader::new(array_reader, read_plan);
-        log::debug!("ParquetRecordBatchReader build completed in {:?}", start_time.elapsed());
         Ok(result)
     }
 }
@@ -1096,6 +1068,7 @@ impl ParquetRecordBatchReader {
         let struct_array = array.as_struct_opt().ok_or_else(|| {
             ArrowError::ParquetError("Struct array reader should return struct array".to_string())
         })?;
+        self.read_plan.advance_row_counts(struct_array.len());
 
         Ok(if struct_array.len() > 0 {
             Some(RecordBatch::from(struct_array))
@@ -1103,12 +1076,9 @@ impl ParquetRecordBatchReader {
             None
         })
     }
-    
-    pub fn may_has_next(&self) -> bool {
-        self.read_plan.may_has_next()
-    }
 
-    pub fn remaining_row_count(&self) -> Option<usize> {
+    /// Remaining row count of the plan.
+    pub fn remaining_row_count(&self) -> usize {
         self.read_plan.remaining_row_count()
     }
 }
@@ -1150,6 +1120,7 @@ impl ParquetRecordBatchReader {
 
         let read_plan = ReadPlanBuilder::new(batch_size)
             .with_selection(selection)
+            .with_row_group_row_numbers(row_groups.num_rows())
             .build();
 
         Ok(Self {

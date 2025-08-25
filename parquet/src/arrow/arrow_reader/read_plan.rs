@@ -33,6 +33,7 @@ pub(crate) struct ReadPlanBuilder {
     batch_size: usize,
     /// Current to apply, includes all filters
     selection: Option<RowSelection>,
+    row_group_row_numbers: usize,
 }
 
 impl ReadPlanBuilder {
@@ -41,12 +42,19 @@ impl ReadPlanBuilder {
         Self {
             batch_size,
             selection: None,
+            row_group_row_numbers: 0,
         }
     }
 
     /// Set the current selection to the given value
     pub(crate) fn with_selection(mut self, selection: Option<RowSelection>) -> Self {
         self.selection = selection;
+        self
+    }
+
+    /// Set the current selection to the given value
+    pub(crate) fn with_row_group_row_numbers(mut self, number: usize) -> Self {
+        self.row_group_row_numbers = number;
         self
     }
 
@@ -131,6 +139,7 @@ impl ReadPlanBuilder {
         let Self {
             batch_size,
             selection,
+            row_group_row_numbers,
         } = self;
 
         let selection = selection.map(|s| s.trim().into());
@@ -138,6 +147,7 @@ impl ReadPlanBuilder {
         ReadPlan {
             batch_size,
             selection,
+            row_group_row_numbers,
         }
     }
 }
@@ -235,6 +245,8 @@ pub(crate) struct ReadPlan {
     batch_size: usize,
     /// Row ranges to be selected from the data source
     selection: Option<VecDeque<RowSelector>>,
+    /// The summary of row-number
+    row_group_row_numbers: usize,
 }
 
 impl ReadPlan {
@@ -243,18 +255,9 @@ impl ReadPlan {
         self.selection.as_mut()
     }
 
-    pub(crate) fn may_has_next(&self) -> bool {
+    pub(crate) fn remaining_row_count(&self) -> usize {
         match &self.selection {
-            None => true,
-            Some(s) => {
-                !s.is_empty()
-            }
-        }
-    }
-
-    pub(crate) fn remaining_row_count(&self) -> Option<usize> {
-        match &self.selection {
-            None => None,
+            None => self.row_group_row_numbers,
             Some(s) => {
                 let mut value = 0;
                 for v in s {
@@ -262,9 +265,13 @@ impl ReadPlan {
                         value += v.row_count;
                     }
                 }
-                Some(value)
+                value
             }
         }
+    }
+
+    pub(crate) fn advance_row_counts(&mut self, number: usize) {
+        self.row_group_row_numbers -= number;
     }
 
     /// Return the number of rows to read in each output batch
