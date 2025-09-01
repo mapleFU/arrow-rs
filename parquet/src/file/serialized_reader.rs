@@ -384,6 +384,7 @@ pub(crate) fn decode_page(
         offset = usize::try_from(
             header_v2.definition_levels_byte_length + header_v2.repetition_levels_byte_length,
         )?;
+        log::info!("Page HeaderV2.is_compressed is {:?}", header_v2.is_compressed);
         // When is_compressed flag is missing the page is considered compressed
         can_decompress = header_v2.is_compressed.unwrap_or(true);
     }
