@@ -363,6 +363,26 @@ impl<W: Write + Send> ArrowWriter<W> {
         Ok(())
     }
 
+    /// Prepare to flush for buffer.
+    pub fn prepare_flush(&mut self) -> Result<Option<Vec<ArrowColumnWriter>>> {
+        let in_progress = match self.in_progress.take() {
+            Some(in_progress) => in_progress,
+            None => return Ok(None),
+        };
+
+        Ok(Some(in_progress.writers))
+    }
+
+    /// Commit the prepare_flush.
+    pub fn commit_flush(&mut self, column_chunks: Vec<ArrowColumnChunk>) -> Result<()> {
+        let mut row_group_writer = self.writer.next_row_group()?;
+        for chunk in column_chunks {
+            chunk.append_to_row_group(&mut row_group_writer)?;
+        }
+        row_group_writer.close()?;
+        Ok(())
+    }
+
     /// Additional [`KeyValue`] metadata to be written in addition to those from [`WriterProperties`]
     ///
     /// This method provide a way to append kv_metadata after write RecordBatch
