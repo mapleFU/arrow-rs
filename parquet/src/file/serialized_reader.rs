@@ -368,8 +368,6 @@ pub(crate) fn decode_page(
     if let Some(ref header_v2) = page_header.data_page_header_v2 {
         if header_v2.definition_levels_byte_length < 0
             || header_v2.repetition_levels_byte_length < 0
-            || header_v2.definition_levels_byte_length + header_v2.repetition_levels_byte_length
-                > page_header.uncompressed_page_size
         {
             return Err(general_err!(
                 "DataPage v2 header contains implausible values \
@@ -392,7 +390,7 @@ pub(crate) fn decode_page(
     // maximum page header size and abort if that is exceeded.
     let buffer = match decompressor {
         Some(decompressor) if can_decompress => {
-            let uncompressed_page_size = usize::try_from(page_header.uncompressed_page_size)?;
+            let uncompressed_page_size = page_header.uncompressed_page_size as usize;
             let decompressed_size = uncompressed_page_size - offset;
             let mut decompressed = Vec::with_capacity(uncompressed_page_size);
             decompressed.extend_from_slice(&buffer.as_ref()[..offset]);
