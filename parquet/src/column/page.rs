@@ -196,9 +196,21 @@ impl CompressedPage {
     }
 
     /// Returns the thrift page header
-    pub(crate) fn to_thrift_header(&self) -> PageHeader {
+    pub(crate) fn to_thrift_header(&self) -> Result<PageHeader> {
         let uncompressed_size = self.uncompressed_size();
         let compressed_size = self.compressed_size();
+        if uncompressed_size > i32::MAX as usize {
+            return Err(general_err!(
+                "uncompressed size {} exceeds i32::MAX",
+                uncompressed_size
+            ));
+        }
+        if compressed_size > i32::MAX as usize {
+            return Err(general_err!(
+                "compressed size {} exceeds i32::MAX",
+                compressed_size
+            ));
+        }
         let num_values = self.num_values();
         let encoding = self.encoding();
         let page_type = self.page_type();
@@ -261,7 +273,7 @@ impl CompressedPage {
                 page_header.dictionary_page_header = Some(dictionary_page_header);
             }
         }
-        page_header
+        Ok(page_header)
     }
 
     /// Update the compressed buffer for a page.
