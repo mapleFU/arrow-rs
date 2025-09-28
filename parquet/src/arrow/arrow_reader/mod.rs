@@ -875,14 +875,12 @@ impl<T: ChunkReader + 'static> ParquetRecordBatchReaderBuilder<T> {
 
         let row_groups = row_groups.unwrap_or_else(|| (0..metadata.num_row_groups()).collect());
 
-        let reader_start = std::time::Instant::now();
         let reader = ReaderRowGroups {
             reader: Arc::new(input.0),
             metadata,
             row_groups,
         };
 
-        let plan_builder_start = std::time::Instant::now();
         let mut plan_builder = ReadPlanBuilder::new(batch_size)
             .with_selection(selection)
             .with_row_group_row_numbers(reader.num_rows());
