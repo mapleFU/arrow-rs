@@ -37,6 +37,7 @@ use std::fs::File;
 
 use arrow_array::RecordBatchReader;
 use clap::{builder::PossibleValue, Parser, ValueEnum};
+use parquet::basic::ZstdLevel;
 use parquet::{
     arrow::{arrow_reader::ParquetRecordBatchReaderBuilder, ArrowWriter},
     basic::{Compression, Encoding},
@@ -83,7 +84,7 @@ impl From<CompressionArgs> for Compression {
             CompressionArgs::Lzo => Self::LZO,
             CompressionArgs::Brotli => Self::BROTLI(Default::default()),
             CompressionArgs::Lz4 => Self::LZ4,
-            CompressionArgs::Zstd => Self::ZSTD(Default::default()),
+            CompressionArgs::Zstd => Self::ZSTD(ZstdLevel::try_new(3).unwrap()),
             CompressionArgs::Lz4Raw => Self::LZ4_RAW,
         }
     }
@@ -289,6 +290,9 @@ struct Args {
     /// Sets whether to coerce Arrow types to match Parquet specification
     #[clap(long)]
     coerce_types: Option<bool>,
+
+    #[clap(long)]
+    batch_size: Option<usize>,
 }
 
 fn main() {
@@ -304,11 +308,14 @@ fn main() {
         .key_value_metadata()
         .cloned();
 
+    let batch_size = args.batch_size.unwrap_or(1024);
+
     // create actual parquet reader
     let parquet_reader = ParquetRecordBatchReaderBuilder::try_new(
         File::open(args.input).expect("Unable to open input file"),
     )
     .expect("parquet open")
+    .with_batch_size(batch_size)
     .build()
     .expect("parquet open");
 
