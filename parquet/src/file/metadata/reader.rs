@@ -423,6 +423,11 @@ impl ParquetMetaDataReader {
         Ok(())
     }
 
+    /// Get the size of metadata.
+    pub fn metadata_size(&self) -> Option<usize> {
+        self.metadata_size
+    }
+
     /// Given a [`MetadataFetch`], parse and return the [`ParquetMetaData`] in a single pass.
     ///
     /// This call will consume `self`.
@@ -724,10 +729,25 @@ impl ParquetMetaDataReader {
             return Err(ParquetError::NeedMoreData(FOOTER_SIZE));
         }
 
-        let mut footer = [0_u8; 8];
-        chunk_reader
-            .get_read(file_size - 8)?
-            .read_exact(&mut footer)?;
+        let prefetch = self.get_prefetch_size() as u64;
+
+        // If a size hint is provided, read more than the minimum size
+        // to try and avoid a second read.
+        // Note: prefetch > file_size is ok since we're using saturating_sub.
+        let footer_start = file_size.saturating_sub(prefetch);
+        let prefetch_len = (file_size - footer_start) as usize;
+
+        // Read the prefetch buffer from the end of the file
+        let suffix = chunk_reader.get_bytes(footer_start, prefetch_len)?;
+        let suffix_len = suffix.len();
+
+        if suffix_len < FOOTER_SIZE {
+            return Err(ParquetError::NeedMoreData(FOOTER_SIZE));
+        }
+
+        // Extract footer from the end of the suffix
+        let mut footer = [0_u8; FOOTER_SIZE];
+        footer.copy_from_slice(&suffix[suffix_len - FOOTER_SIZE..suffix_len]);
 
         let footer = Self::decode_footer_tail(&footer)?;
         let metadata_len = footer.metadata_length();
@@ -738,17 +758,25 @@ impl ParquetMetaDataReader {
             return Err(ParquetError::NeedMoreData(footer_metadata_len));
         }
 
-        let start = file_size - footer_metadata_len as u64;
-        self.decode_footer_metadata(
-            chunk_reader.get_bytes(start, metadata_len)?.as_ref(),
-            &footer,
-        )
+        // Check if we already have the metadata in our prefetch buffer
+        if metadata_len <= suffix_len - FOOTER_SIZE {
+            // We have the entire metadata in the prefetch buffer
+            let metadata_start = suffix_len - footer_metadata_len;
+            let metadata_slice = &suffix[metadata_start..suffix_len - FOOTER_SIZE];
+            self.decode_footer_metadata(metadata_slice, &footer)
+        } else {
+            // Need to make a second read for the metadata
+            let start = file_size - footer_metadata_len as u64;
+            self.decode_footer_metadata(
+                chunk_reader.get_bytes(start, metadata_len)?.as_ref(),
+                &footer,
+            )
+        }
     }
 
     /// Return the number of bytes to read in the initial pass. If `prefetch_size` has
     /// been provided, then return that value if it is larger than the size of the Parquet
     /// file footer (8 bytes). Otherwise returns `8`.
-    #[cfg(all(feature = "async", feature = "arrow"))]
     fn get_prefetch_size(&self) -> usize {
         if let Some(prefetch) = self.prefetch_hint {
             if prefetch > FOOTER_SIZE {
