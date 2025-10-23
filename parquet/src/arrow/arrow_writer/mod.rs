@@ -446,6 +446,11 @@ impl<W: Write + Send> ArrowWriter<W> {
         row_group_writer.close()?;
         Ok(())
     }
+
+    /// Return the schema descriptor for writer.
+    pub fn schema(&self) -> &SchemaDescriptor {
+        self.writer.schema_descr()
+    }
 }
 
 impl<W: Write + Send> RecordBatchWriter for ArrowWriter<W> {
