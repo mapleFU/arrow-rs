@@ -193,6 +193,16 @@ impl<T> ArrowReaderBuilder<T> {
         }
     }
 
+    /// Acquire the row-groups of the builder.
+    pub fn row_groups(&self) -> Option<&Vec<usize>> {
+        self.row_groups.as_ref()
+    }
+
+    /// Acquire row-selection of the builder.
+    pub fn row_selection(&self) -> Option<&RowSelection> {
+        self.selection.as_ref()
+    }
+
     /// Only read data from the provided column indexes
     pub fn with_projection(self, mask: ProjectionMask) -> Self {
         Self {
