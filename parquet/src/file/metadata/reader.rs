@@ -80,9 +80,6 @@ pub struct ParquetMetaDataReader {
     metadata_size: Option<usize>,
     #[cfg(feature = "encryption")]
     file_decryption_properties: Option<FileDecryptionProperties>,
-
-    page_index_required_row_groups: Option<Vec<usize>>,
-    column_index_required_columns: Option<Vec<usize>>,
 }
 
 /// Describes the policy for reading page indexes
@@ -226,26 +223,6 @@ impl ParquetMetaDataReader {
         self.metadata
             .take()
             .ok_or_else(|| general_err!("could not parse parquet metadata"))
-    }
-
-    /// Trying to get the [`ParquetMetaData`] struct.
-    pub fn metadata(&self) -> Option<&ParquetMetaData> {
-        self.metadata.as_ref()
-    }
-
-    /// Add row-group selection for decoding metadata.
-    pub fn with_page_index_row_group_selection(
-        mut self,
-        page_index_row_group_ids: Vec<usize>,
-    ) -> Self {
-        self.page_index_required_row_groups = Some(page_index_row_group_ids);
-        self
-    }
-
-    /// Add column index column selection for decoding metadata.
-    pub fn with_column_index_leaf_column(mut self, column_index_leaf_columns: Vec<usize>) -> Self {
-        self.column_index_required_columns = Some(column_index_leaf_columns);
-        self
     }
 
     /// Given a [`ChunkReader`], parse and return the [`ParquetMetaData`] in a single pass.
@@ -577,37 +554,22 @@ impl ParquetMetaDataReader {
                 .iter()
                 .enumerate()
                 .map(|(rg_idx, x)| {
-                    let need_this_row_group = match &self.page_index_required_row_groups {
-                        None => true,
-                        Some(required_row_groups) => required_row_groups.contains(&rg_idx),
-                    };
-                    if !need_this_row_group {
-                        // Not needs this row-group, so just skipping it.
-                        return Ok(vec![Index::NONE; x.columns.len()]);
-                    }
                     x.columns()
                         .iter()
                         .enumerate()
-                        .map(|(col_idx, c)| {
-                            if let Some(column_indices) = &self.column_index_required_columns {
-                                if !column_indices.contains(&col_idx) {
-                                    return Ok(Index::NONE);
-                                }
+                        .map(|(col_idx, c)| match c.column_index_range() {
+                            Some(r) => {
+                                let r_start = usize::try_from(r.start - start_offset)?;
+                                let r_end = usize::try_from(r.end - start_offset)?;
+                                Self::parse_single_column_index(
+                                    &bytes[r_start..r_end],
+                                    metadata,
+                                    c,
+                                    rg_idx,
+                                    col_idx,
+                                )
                             }
-                            match c.column_index_range() {
-                                Some(r) => {
-                                    let r_start = usize::try_from(r.start - start_offset)?;
-                                    let r_end = usize::try_from(r.end - start_offset)?;
-                                    Self::parse_single_column_index(
-                                        &bytes[r_start..r_end],
-                                        metadata,
-                                        c,
-                                        rg_idx,
-                                        col_idx,
-                                    )
-                                }
-                                None => Ok(Index::NONE),
-                            }
+                            None => Ok(Index::NONE),
                         })
                         .collect::<Result<Vec<_>>>()
                 })
