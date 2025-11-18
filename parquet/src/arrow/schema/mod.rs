@@ -88,6 +88,31 @@ pub(crate) fn parquet_to_arrow_schema_and_fields(
     Ok((schema, field_levels.levels))
 }
 
+/// Extracts the arrow metadata
+pub(crate) fn parquet_to_arrow_schema_and_fields_large(
+    parquet_schema: &SchemaDescriptor,
+    mask: ProjectionMask,
+    key_value_metadata: Option<&Vec<KeyValue>>,
+) -> Result<(Schema, Option<ParquetField>)> {
+    let mut metadata = parse_key_value_metadata(key_value_metadata).unwrap_or_default();
+    let maybe_schema = metadata
+        .remove(super::ARROW_SCHEMA_META_KEY)
+        .map(|value| get_arrow_schema_from_metadata(&value))
+        .transpose()?;
+
+    // Add the Arrow metadata to the Parquet metadata skipping keys that collide
+    if let Some(arrow_schema) = &maybe_schema {
+        arrow_schema.metadata().iter().for_each(|(k, v)| {
+            metadata.entry(k.clone()).or_insert_with(|| v.clone());
+        });
+    }
+
+    let hint = maybe_schema.as_ref().map(|s| s.fields());
+    let field_levels = parquet_to_arrow_field_levels_large(parquet_schema, mask, hint)?;
+    let schema = Schema::new_with_metadata(field_levels.fields, metadata);
+    Ok((schema, field_levels.levels))
+}
+
 /// Schema information necessary to decode a parquet file as arrow [`Fields`]
 ///
 /// In particular this stores the dremel-level information necessary to correctly
@@ -127,6 +152,26 @@ pub fn parquet_to_arrow_field_levels(
     hint: Option<&Fields>,
 ) -> Result<FieldLevels> {
     match complex::convert_schema(schema, mask, hint)? {
+        Some(field) => match &field.arrow_type {
+            DataType::Struct(fields) => Ok(FieldLevels {
+                fields: fields.clone(),
+                levels: Some(field),
+            }),
+            _ => unreachable!(),
+        },
+        None => Ok(FieldLevels {
+            fields: Fields::empty(),
+            levels: None,
+        }),
+    }
+}
+
+pub fn parquet_to_arrow_field_levels_large(
+    schema: &SchemaDescriptor,
+    mask: ProjectionMask,
+    hint: Option<&Fields>,
+) -> Result<FieldLevels> {
+    match complex::convert_schema_large(schema, mask, hint)? {
         Some(field) => match &field.arrow_type {
             DataType::Struct(fields) => Ok(FieldLevels {
                 fields: fields.clone(),

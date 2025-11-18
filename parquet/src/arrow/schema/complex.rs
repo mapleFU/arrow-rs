@@ -18,7 +18,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::arrow::schema::primitive::convert_primitive;
+use crate::arrow::schema::primitive::{convert_primitive, convert_primitive_with_large};
 use crate::arrow::{ProjectionMask, PARQUET_FIELD_ID_META_KEY};
 use crate::basic::{ConvertedType, Repetition};
 use crate::errors::ParquetError;
@@ -124,6 +124,9 @@ struct Visitor {
 
     /// Mask of columns to include
     mask: ProjectionMask,
+
+    /// Change to arrow Large type
+    to_large_type: bool,
 }
 
 impl Visitor {
@@ -142,7 +145,7 @@ impl Visitor {
         let repetition = get_repetition(primitive_type);
         let (def_level, rep_level, nullable) = context.levels(repetition);
 
-        let arrow_type = convert_primitive(primitive_type, context.data_type)?;
+        let arrow_type = convert_primitive_with_large(primitive_type, context.data_type, self.to_large_type)?;
 
         let primitive_field = ParquetField {
             rep_level,
@@ -580,19 +583,14 @@ fn convert_field(parquet_type: &Type, field: &ParquetField, arrow_hint: Option<&
     }
 }
 
-/// Computes the [`ParquetField`] for the provided [`SchemaDescriptor`] with `leaf_columns` listing
-/// the indexes of leaf columns to project, and `embedded_arrow_schema` the optional
-/// [`Fields`] embedded in the parquet metadata
-///
-/// Note: This does not support out of order column projection
-pub fn convert_schema(
-    schema: &SchemaDescriptor,
-    mask: ProjectionMask,
-    embedded_arrow_schema: Option<&Fields>,
-) -> Result<Option<ParquetField>> {
+fn convert_schema_with_large(schema: &SchemaDescriptor,
+                             mask: ProjectionMask,
+                             embedded_arrow_schema: Option<&Fields>,
+                             to_large_type: bool) -> Result<Option<ParquetField>> {
     let mut visitor = Visitor {
         next_col_idx: 0,
         mask,
+        to_large_type,
     };
 
     let context = VisitorContext {
@@ -604,11 +602,41 @@ pub fn convert_schema(
     visitor.dispatch(&schema.root_schema_ptr(), context)
 }
 
+/// Computes the [`ParquetField`] for the provided [`SchemaDescriptor`] with `leaf_columns` listing
+/// the indexes of leaf columns to project, and `embedded_arrow_schema` the optional
+/// [`Fields`] embedded in the parquet metadata
+///
+/// Note: This does not support out of order column projection
+pub fn convert_schema(
+    schema: &SchemaDescriptor,
+    mask: ProjectionMask,
+    embedded_arrow_schema: Option<&Fields>,
+) -> Result<Option<ParquetField>> {
+    convert_schema_with_large(schema, mask, embedded_arrow_schema, false)
+}
+
+/// Computes the [`ParquetField`] for the provided [`SchemaDescriptor`] with `leaf_columns` listing
+/// the indexes of leaf columns to project, and `embedded_arrow_schema` the optional
+/// [`Fields`] embedded in the parquet metadata
+///
+/// Apart from convert_schema, this converts the schema to a large type.
+///
+/// Note: This does not support out of order column projection
+pub fn convert_schema_large(
+    schema: &SchemaDescriptor,
+    mask: ProjectionMask,
+    embedded_arrow_schema: Option<&Fields>,
+) -> Result<Option<ParquetField>> {
+    convert_schema_with_large(schema, mask, embedded_arrow_schema, true)
+}
+
+
 /// Computes the [`ParquetField`] for the provided `parquet_type`
 pub fn convert_type(parquet_type: &TypePtr) -> Result<ParquetField> {
     let mut visitor = Visitor {
         next_col_idx: 0,
         mask: ProjectionMask::all(),
+        to_large_type: false,
     };
 
     let context = VisitorContext {

@@ -28,7 +28,14 @@ pub fn convert_primitive(
     parquet_type: &Type,
     arrow_type_hint: Option<DataType>,
 ) -> Result<DataType> {
-    let physical_type = from_parquet(parquet_type)?;
+    convert_primitive_with_large(parquet_type, arrow_type_hint, false)
+}
+
+pub(crate) fn convert_primitive_with_large(parquet_type: &Type,
+                                           arrow_type_hint: Option<DataType>,
+                                           to_large_type: bool
+) -> Result<DataType> {
+    let physical_type = from_parquet(parquet_type, to_large_type)?;
     Ok(match arrow_type_hint {
         Some(hint) => apply_hint(physical_type, hint),
         None => physical_type,
@@ -106,7 +113,7 @@ fn apply_hint(parquet: DataType, hint: DataType) -> DataType {
     }
 }
 
-fn from_parquet(parquet_type: &Type) -> Result<DataType> {
+fn from_parquet(parquet_type: &Type, to_large_type: bool) -> Result<DataType> {
     match parquet_type {
         Type::PrimitiveType {
             physical_type,
@@ -122,7 +129,7 @@ fn from_parquet(parquet_type: &Type) -> Result<DataType> {
             PhysicalType::INT96 => Ok(DataType::Timestamp(TimeUnit::Nanosecond, None)),
             PhysicalType::FLOAT => Ok(DataType::Float32),
             PhysicalType::DOUBLE => Ok(DataType::Float64),
-            PhysicalType::BYTE_ARRAY => from_byte_array(basic_info, *precision, *scale),
+            PhysicalType::BYTE_ARRAY => from_byte_array(basic_info, *precision, *scale, to_large_type),
             PhysicalType::FIXED_LEN_BYTE_ARRAY => {
                 from_fixed_len_byte_array(basic_info, *scale, *precision, *type_length)
             }
@@ -270,17 +277,27 @@ fn from_int64(info: &BasicTypeInfo, scale: i32, precision: i32) -> Result<DataTy
     }
 }
 
-fn from_byte_array(info: &BasicTypeInfo, precision: i32, scale: i32) -> Result<DataType> {
+fn from_byte_array(info: &BasicTypeInfo, precision: i32, scale: i32, to_large_type: bool) -> Result<DataType> {
+    let u8_type = if to_large_type {
+        DataType::LargeUtf8
+    } else {
+        DataType::Utf8
+    };
+    let binary_type = if to_large_type {
+        DataType::LargeBinary
+    } else {
+        DataType::Binary
+    };
     match (info.logical_type(), info.converted_type()) {
-        (Some(LogicalType::String), _) => Ok(DataType::Utf8),
-        (Some(LogicalType::Json), _) => Ok(DataType::Utf8),
-        (Some(LogicalType::Bson), _) => Ok(DataType::Binary),
-        (Some(LogicalType::Enum), _) => Ok(DataType::Binary),
-        (None, ConvertedType::NONE) => Ok(DataType::Binary),
-        (None, ConvertedType::JSON) => Ok(DataType::Utf8),
-        (None, ConvertedType::BSON) => Ok(DataType::Binary),
-        (None, ConvertedType::ENUM) => Ok(DataType::Binary),
-        (None, ConvertedType::UTF8) => Ok(DataType::Utf8),
+        (Some(LogicalType::String), _) => Ok(u8_type),
+        (Some(LogicalType::Json), _) => Ok(u8_type),
+        (Some(LogicalType::Bson), _) => Ok(binary_type),
+        (Some(LogicalType::Enum), _) => Ok(binary_type),
+        (None, ConvertedType::NONE) => Ok(binary_type),
+        (None, ConvertedType::JSON) => Ok(u8_type),
+        (None, ConvertedType::BSON) => Ok(binary_type),
+        (None, ConvertedType::ENUM) => Ok(binary_type),
+        (None, ConvertedType::UTF8) => Ok(u8_type),
         (
             Some(LogicalType::Decimal {
                 scale: s,

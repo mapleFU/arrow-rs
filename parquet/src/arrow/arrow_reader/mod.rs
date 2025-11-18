@@ -19,7 +19,9 @@
 
 pub use crate::arrow::array_reader::RowGroups;
 use crate::arrow::array_reader::{ArrayReader, ArrayReaderBuilder};
-use crate::arrow::schema::{parquet_to_arrow_schema_and_fields, ParquetField};
+use crate::arrow::schema::{
+    parquet_to_arrow_schema_and_fields, parquet_to_arrow_schema_and_fields_large, ParquetField,
+};
 use crate::arrow::{parquet_to_arrow_field_levels, FieldLevels, ProjectionMask};
 use crate::bloom_filter::{
     chunk_read_bloom_filter_header_and_offset, Sbbf, SBBF_HEADER_SIZE_ESTIMATE,
@@ -602,6 +604,39 @@ impl ArrowReaderMetadata {
                 };
 
                 let (schema, fields) = parquet_to_arrow_schema_and_fields(
+                    metadata.file_metadata().schema_descr(),
+                    ProjectionMask::all(),
+                    kv_metadata,
+                )?;
+
+                Ok(Self {
+                    metadata,
+                    schema: Arc::new(schema),
+                    fields: fields.map(Arc::new),
+                })
+            }
+        }
+    }
+
+    /// Create a new [`ArrowReaderMetadata`]
+    ///
+    /// # Notes
+    ///
+    /// This function does not attempt to load the PageIndex if not present in the metadata.
+    /// See [`Self::load`] for more details.
+    pub fn try_new_large(
+        metadata: Arc<ParquetMetaData>,
+        options: ArrowReaderOptions,
+    ) -> Result<Self> {
+        match options.supplied_schema {
+            Some(supplied_schema) => Self::with_supplied_schema(metadata, supplied_schema.clone()),
+            None => {
+                let kv_metadata = match options.skip_arrow_metadata {
+                    true => None,
+                    false => metadata.file_metadata().key_value_metadata(),
+                };
+
+                let (schema, fields) = parquet_to_arrow_schema_and_fields_large(
                     metadata.file_metadata().schema_descr(),
                     ProjectionMask::all(),
                     kv_metadata,
