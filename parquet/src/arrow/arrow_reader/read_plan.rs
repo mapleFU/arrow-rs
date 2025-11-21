@@ -255,6 +255,11 @@ impl ReadPlan {
         self.selection.as_mut()
     }
 
+    /// Returns a reference to the selection, if any
+    pub(crate) fn selection(&self) -> Option<&VecDeque<RowSelector>> {
+        self.selection.as_ref()
+    }
+
     pub(crate) fn remaining_row_count(&self) -> usize {
         match &self.selection {
             None => self.row_group_row_numbers,

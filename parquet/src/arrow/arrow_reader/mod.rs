@@ -40,6 +40,7 @@ use arrow_array::{RecordBatch, RecordBatchReader};
 use arrow_schema::{ArrowError, DataType as ArrowType, Schema, SchemaRef};
 pub use filter::{ArrowPredicate, ArrowPredicateFn, RowFilter};
 pub use selection::{RowSelection, RowSelector};
+use std::collections::VecDeque;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
@@ -1123,6 +1124,11 @@ impl ParquetRecordBatchReader {
     /// Remaining row count of the plan.
     pub fn remaining_row_count(&self) -> usize {
         self.read_plan.remaining_row_count()
+    }
+
+    /// The selection of the file.
+    pub fn maybe_selection(&self) -> Option<&VecDeque<RowSelector>> {
+        self.read_plan.selection()
     }
 }
 
