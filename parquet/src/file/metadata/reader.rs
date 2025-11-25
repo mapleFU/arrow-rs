@@ -31,7 +31,7 @@ use crate::file::page_index::index::Index;
 use crate::file::page_index::index_reader::{acc_range, decode_column_index, decode_offset_index};
 use crate::file::reader::ChunkReader;
 use crate::file::{FOOTER_SIZE, PARQUET_MAGIC, PARQUET_MAGIC_ENCR_FOOTER};
-use crate::format::{ColumnOrder as TColumnOrder, FileMetaData as TFileMetaData};
+use crate::format::{ColumnOrder as TColumnOrder, FileMetaData as TFileMetaData, OffsetIndex};
 #[cfg(feature = "encryption")]
 use crate::format::{EncryptionAlgorithm, FileCryptoMetaData as TFileCryptoMetaData};
 use crate::schema::types;
@@ -665,6 +665,15 @@ impl ParquetMetaDataReader {
             for (rg_idx, x) in row_groups.iter().enumerate() {
                 let mut row_group_indexes = Vec::with_capacity(x.columns().len());
                 for (col_idx, c) in x.columns().iter().enumerate() {
+                    if let Some(required_cols) = &self.column_index_required_columns {
+                        if !required_cols.contains(&col_idx) {
+                            row_group_indexes.push(OffsetIndexMetaData::try_new(OffsetIndex {
+                                page_locations: vec![],
+                                unencoded_byte_array_data_bytes: None,
+                            })?);
+                            continue;
+                        }
+                    }
                     let result = match c.offset_index_range() {
                         Some(r) => {
                             let r_start = usize::try_from(r.start - start_offset)?;
