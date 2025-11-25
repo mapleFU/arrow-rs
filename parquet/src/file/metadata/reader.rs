@@ -740,7 +740,7 @@ impl ParquetMetaDataReader {
         decode_offset_index(bytes)
     }
 
-    fn range_for_page_index(&self) -> Option<Range<u64>> {
+    pub fn range_for_page_index(&self) -> Option<Range<u64>> {
         // sanity check
         self.metadata.as_ref()?;
 
