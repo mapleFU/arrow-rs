@@ -83,6 +83,7 @@ pub struct ParquetMetaDataReader {
 
     page_index_required_row_groups: Option<Vec<usize>>,
     column_index_required_columns: Option<Vec<usize>>,
+    offset_index_required_columns: Option<Vec<usize>>,
 }
 
 /// Describes the policy for reading page indexes
@@ -245,6 +246,12 @@ impl ParquetMetaDataReader {
     /// Add column index column selection for decoding metadata.
     pub fn with_column_index_leaf_column(mut self, column_index_leaf_columns: Vec<usize>) -> Self {
         self.column_index_required_columns = Some(column_index_leaf_columns);
+        self
+    }
+
+    /// Add offset index column selection for decoding metadata.
+    pub fn with_offset_index_leaf_column(mut self, offset_index_leaf_columns: Vec<usize>) -> Self {
+        self.offset_index_required_columns = Some(offset_index_leaf_columns);
         self
     }
 
@@ -665,7 +672,7 @@ impl ParquetMetaDataReader {
             for (rg_idx, x) in row_groups.iter().enumerate() {
                 let mut row_group_indexes = Vec::with_capacity(x.columns().len());
                 for (col_idx, c) in x.columns().iter().enumerate() {
-                    if let Some(required_cols) = &self.column_index_required_columns {
+                    if let Some(required_cols) = &self.offset_index_required_columns {
                         if !required_cols.contains(&col_idx) {
                             row_group_indexes.push(OffsetIndexMetaData::try_new(OffsetIndex {
                                 page_locations: vec![],
