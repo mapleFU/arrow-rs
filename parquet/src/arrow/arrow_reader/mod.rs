@@ -45,7 +45,8 @@ use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
 use crate::arrow::arrow_reader::metrics::ArrowReaderMetrics;
-pub(crate) use read_plan::{ReadPlan, ReadPlanBuilder};
+pub use read_plan::ReadPlan;
+use read_plan::ReadPlanBuilder;
 mod filter;
 pub mod metrics;
 mod read_plan;
