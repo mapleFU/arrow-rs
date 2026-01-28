@@ -70,6 +70,10 @@ impl<OffsetSize: OffsetSizeTrait> ArrayReader for ListArrayReader<OffsetSize> {
         self
     }
 
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     /// Returns data type.
     /// This must be a List.
     fn get_data_type(&self) -> &ArrowType {

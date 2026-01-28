@@ -190,6 +190,10 @@ impl ArrayReader for CachedArrayReader {
         self
     }
 
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn get_data_type(&self) -> &ArrowType {
         self.inner.get_data_type()
     }
@@ -377,6 +381,10 @@ mod tests {
 
     impl ArrayReader for MockArrayReader {
         fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn as_any_mut(&mut self) -> &mut dyn Any {
             self
         }
 

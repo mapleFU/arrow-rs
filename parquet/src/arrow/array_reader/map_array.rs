@@ -84,6 +84,10 @@ impl ArrayReader for MapArrayReader {
         self
     }
 
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn get_data_type(&self) -> &ArrowType {
         &self.data_type
     }

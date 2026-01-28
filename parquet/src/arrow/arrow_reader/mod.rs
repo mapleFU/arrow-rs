@@ -18,7 +18,7 @@
 //! Contains reader which reads parquet data into arrow [`RecordBatch`]
 
 pub use crate::arrow::array_reader::RowGroups;
-use crate::arrow::array_reader::{ArrayReader, ArrayReaderBuilder};
+use crate::arrow::array_reader::{ArrayReader, ArrayReaderBuilder, StructArrayReader};
 use crate::arrow::schema::{
     parquet_to_arrow_schema_and_fields, parquet_to_arrow_schema_and_fields_large, ParquetField,
 };
@@ -1055,6 +1055,14 @@ impl Iterator for ParquetRecordBatchReader {
 }
 
 impl ParquetRecordBatchReader {
+    /// Returns the mutable children array readers if the underlying array reader is a StructArrayReader.
+    pub fn get_struct_children_mut(&mut self) -> Option<&mut Vec<Box<dyn ArrayReader>>> {
+        self.array_reader
+            .as_any_mut()
+            .downcast_mut::<StructArrayReader>()
+            .map(|x| x.children_mut())
+    }
+
     /// Returns the next `RecordBatch` from the reader, or `None` if the reader
     /// has reached the end of the file.
     ///
@@ -4993,5 +5001,43 @@ mod tests {
             .unwrap();
         assert!(sbbf.check(&"Hello"));
         assert!(!sbbf.check(&"Hello_Not_Exists"));
+    }
+
+    #[test]
+    fn test_get_struct_children_mut() {
+        use crate::arrow::array_reader::{test_util::InMemoryArrayReader, StructArrayReader};
+        use crate::arrow::arrow_reader::read_plan::ReadPlanBuilder;
+        use arrow_array::Int32Array;
+        use arrow_schema::{DataType, Field};
+        use std::sync::Arc;
+
+        // Create a simple StructArrayReader
+        let child_array = Arc::new(Int32Array::from(vec![1, 2, 3]));
+        let child_reader = InMemoryArrayReader::new(DataType::Int32, child_array, None, None);
+
+        let struct_type = DataType::Struct(vec![Field::new("col", DataType::Int32, true)].into());
+        let struct_reader = StructArrayReader::new(
+            struct_type,
+            vec![Box::new(child_reader)],
+            0,
+            0,
+            false,
+        );
+
+        // Create ParquetRecordBatchReader
+        let mut reader = ParquetRecordBatchReader::new(
+            Box::new(struct_reader),
+            ReadPlanBuilder::new(1024).build(),
+        );
+
+        // Test get_struct_children_mut
+        let children = reader.get_struct_children_mut();
+        assert!(children.is_some());
+        let children = children.unwrap();
+        assert_eq!(children.len(), 1);
+
+        // Modify children (just to prove it's mutable)
+        children.clear();
+        assert_eq!(reader.get_struct_children_mut().unwrap().len(), 0);
     }
 }

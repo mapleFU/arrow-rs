@@ -70,6 +70,10 @@ where
         self
     }
 
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     /// Returns data type of primitive array.
     fn get_data_type(&self) -> &ArrowType {
         &self.data_type

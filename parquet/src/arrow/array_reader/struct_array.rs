@@ -49,10 +49,19 @@ impl StructArrayReader {
             nullable,
         }
     }
+
+    /// Returns the mutable children array readers.
+    pub fn children_mut(&mut self) -> &mut Vec<Box<dyn ArrayReader>> {
+        &mut self.children
+    }
 }
 
 impl ArrayReader for StructArrayReader {
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 

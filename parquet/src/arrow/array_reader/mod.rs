@@ -45,7 +45,7 @@ mod row_group_cache;
 mod struct_array;
 
 #[cfg(test)]
-mod test_util;
+pub(crate) mod test_util;
 
 // Note that this crate is public under the `experimental` feature flag.
 pub use builder::{ArrayReaderBuilder, CacheOptions, CacheOptionsBuilder};
@@ -84,6 +84,9 @@ pub trait ArrayReader: Send {
     // removed.
     #[allow(dead_code)]
     fn as_any(&self) -> &dyn Any;
+
+    /// Returns a mutable reference to Any
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 
     /// Returns the arrow type of this array reader.
     fn get_data_type(&self) -> &ArrowType;
