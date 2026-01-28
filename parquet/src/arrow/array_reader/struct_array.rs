@@ -65,6 +65,10 @@ impl ArrayReader for StructArrayReader {
         self
     }
 
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
     /// Returns data type.
     /// This must be a struct.
     fn get_data_type(&self) -> &ArrowType {

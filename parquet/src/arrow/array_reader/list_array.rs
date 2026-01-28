@@ -74,6 +74,10 @@ impl<OffsetSize: OffsetSizeTrait> ArrayReader for ListArrayReader<OffsetSize> {
         self
     }
 
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
     /// Returns data type.
     /// This must be a List.
     fn get_data_type(&self) -> &ArrowType {

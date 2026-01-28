@@ -18,7 +18,7 @@
 //! Contains reader which reads parquet data into arrow [`RecordBatch`]
 
 pub use crate::arrow::array_reader::RowGroups;
-use crate::arrow::array_reader::{ArrayReader, ArrayReaderBuilder, StructArrayReader};
+pub use crate::arrow::array_reader::{ArrayReader, ArrayReaderBuilder, StructArrayReader};
 use crate::arrow::schema::{
     parquet_to_arrow_schema_and_fields, parquet_to_arrow_schema_and_fields_large, ParquetField,
 };
@@ -1061,6 +1061,16 @@ impl ParquetRecordBatchReader {
             .as_any_mut()
             .downcast_mut::<StructArrayReader>()
             .map(|x| x.children_mut())
+    }
+
+    /// Converts the current reader to a Struct based array reader.
+    pub fn into_struct_reader(self) -> Option<(Box<StructArrayReader>, SchemaRef, ReadPlan)> {
+        let struct_reader = self
+            .array_reader
+            .into_any()
+            .downcast::<StructArrayReader>()
+            .ok()?;
+        Some((struct_reader, self.schema, self.read_plan))
     }
 
     /// Returns the next `RecordBatch` from the reader, or `None` if the reader
@@ -5004,6 +5014,41 @@ mod tests {
     }
 
     #[test]
+    fn test_into_struct_reader() {
+        use crate::arrow::array_reader::{
+            test_util::InMemoryArrayReader, ArrayReader, StructArrayReader,
+        };
+        use crate::arrow::arrow_reader::read_plan::ReadPlanBuilder;
+        use arrow_array::Int32Array;
+        use arrow_schema::{DataType, Field};
+        use std::sync::Arc;
+
+        // Create a simple StructArrayReader
+        let child_array = Arc::new(Int32Array::from(vec![1, 2, 3]));
+        let child_reader = InMemoryArrayReader::new(DataType::Int32, child_array, None, None);
+
+        let struct_type = DataType::Struct(vec![Field::new("col", DataType::Int32, true)].into());
+        let struct_reader =
+            StructArrayReader::new(struct_type, vec![Box::new(child_reader)], 0, 0, false);
+
+        // Create ParquetRecordBatchReader
+        let reader = ParquetRecordBatchReader::new(
+            Box::new(struct_reader),
+            ReadPlanBuilder::new(1024).build(),
+        );
+
+        // Test into_struct_reader
+        let result = reader.into_struct_reader();
+        assert!(result.is_some());
+        let (struct_reader, _, _) = result.unwrap();
+        // Verify we got the struct reader back
+        // assert!(struct_reader.as_any().is::<StructArrayReader>()); // struct_reader is already explicitly StructArrayReader
+        assert_eq!(
+            struct_reader.get_data_type(),
+            &DataType::Struct(vec![Field::new("col", DataType::Int32, true)].into())
+        );
+    }
+    #[test]
     fn test_get_struct_children_mut() {
         use crate::arrow::array_reader::{test_util::InMemoryArrayReader, StructArrayReader};
         use crate::arrow::arrow_reader::read_plan::ReadPlanBuilder;
@@ -5016,13 +5061,8 @@ mod tests {
         let child_reader = InMemoryArrayReader::new(DataType::Int32, child_array, None, None);
 
         let struct_type = DataType::Struct(vec![Field::new("col", DataType::Int32, true)].into());
-        let struct_reader = StructArrayReader::new(
-            struct_type,
-            vec![Box::new(child_reader)],
-            0,
-            0,
-            false,
-        );
+        let struct_reader =
+            StructArrayReader::new(struct_type, vec![Box::new(child_reader)], 0, 0, false);
 
         // Create ParquetRecordBatchReader
         let mut reader = ParquetRecordBatchReader::new(

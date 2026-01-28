@@ -74,6 +74,10 @@ where
         self
     }
 
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
     /// Returns data type of primitive array.
     fn get_data_type(&self) -> &ArrowType {
         &self.data_type

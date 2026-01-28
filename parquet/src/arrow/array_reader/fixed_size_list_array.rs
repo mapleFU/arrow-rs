@@ -70,6 +70,10 @@ impl ArrayReader for FixedSizeListArrayReader {
         self
     }
 
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        self
+    }
+
     fn get_data_type(&self) -> &ArrowType {
         &self.data_type
     }

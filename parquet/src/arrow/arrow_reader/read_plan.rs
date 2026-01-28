@@ -240,7 +240,7 @@ impl LimitedReadPlanBuilder {
 /// A plan reading specific rows from a Parquet Row Group.
 ///
 /// See [`ReadPlanBuilder`] to create `ReadPlan`s
-pub(crate) struct ReadPlan {
+pub struct ReadPlan {
     /// The number of rows to read in each batch
     batch_size: usize,
     /// Row ranges to be selected from the data source
@@ -251,16 +251,16 @@ pub(crate) struct ReadPlan {
 
 impl ReadPlan {
     /// Returns a mutable reference to the selection, if any
-    pub(crate) fn selection_mut(&mut self) -> Option<&mut VecDeque<RowSelector>> {
+    pub fn selection_mut(&mut self) -> Option<&mut VecDeque<RowSelector>> {
         self.selection.as_mut()
     }
 
     /// Returns a reference to the selection, if any
-    pub(crate) fn selection(&self) -> Option<&VecDeque<RowSelector>> {
+    pub fn selection(&self) -> Option<&VecDeque<RowSelector>> {
         self.selection.as_ref()
     }
 
-    pub(crate) fn remaining_row_count(&self) -> usize {
+    pub fn remaining_row_count(&self) -> usize {
         match &self.selection {
             None => self.row_group_row_numbers,
             Some(s) => {
@@ -275,7 +275,7 @@ impl ReadPlan {
         }
     }
 
-    pub(crate) fn advance_row_counts(&mut self, number: usize) {
+    pub fn advance_row_counts(&mut self, number: usize) {
         self.row_group_row_numbers -= number;
     }
 

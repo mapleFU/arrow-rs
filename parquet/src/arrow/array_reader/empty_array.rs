@@ -56,6 +56,10 @@ impl ArrayReader for EmptyArrayReader {
         self
     }
 
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+
     fn get_data_type(&self) -> &ArrowType {
         &self.data_type
     }

@@ -88,6 +88,9 @@ pub trait ArrayReader: Send {
     /// Returns a mutable reference to Any
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
+    /// Returns a Box<Any> from Box<Self>
+    fn into_any(self: Box<Self>) -> Box<dyn Any>;
+
     /// Returns the arrow type of this array reader.
     fn get_data_type(&self) -> &ArrowType;
 
