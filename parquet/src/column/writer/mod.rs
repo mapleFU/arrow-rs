@@ -1460,6 +1460,7 @@ fn fallback_encoding(kind: Type, props: &WriterProperties) -> Encoding {
         (Type::INT64, WriterVersion::PARQUET_2_0) => Encoding::DELTA_BINARY_PACKED,
         (Type::BYTE_ARRAY, WriterVersion::PARQUET_2_0) => Encoding::DELTA_BYTE_ARRAY,
         (Type::FIXED_LEN_BYTE_ARRAY, WriterVersion::PARQUET_2_0) => Encoding::DELTA_BYTE_ARRAY,
+        (Type::FLOAT, WriterVersion::PARQUET_2_0) => Encoding::BYTE_STREAM_SPLIT,
         _ => Encoding::PLAIN,
     }
 }
