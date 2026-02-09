@@ -46,6 +46,7 @@ use parquet::{
         serialized_reader::SerializedFileReader,
     },
 };
+use parquet::basic::ZstdLevel;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum CompressionArgs {
@@ -83,7 +84,7 @@ impl From<CompressionArgs> for Compression {
             CompressionArgs::Lzo => Self::LZO,
             CompressionArgs::Brotli => Self::BROTLI(Default::default()),
             CompressionArgs::Lz4 => Self::LZ4,
-            CompressionArgs::Zstd => Self::ZSTD(Default::default()),
+            CompressionArgs::Zstd => Self::ZSTD(ZstdLevel::try_new(3).unwrap()),
             CompressionArgs::Lz4Raw => Self::LZ4_RAW,
         }
     }
